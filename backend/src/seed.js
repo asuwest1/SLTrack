@@ -1,3 +1,9 @@
+// Safety: prevent accidental execution in production
+if (process.env.NODE_ENV === 'production') {
+  console.error('ERROR: Seed script cannot run in production. This would destroy all data.');
+  process.exit(1);
+}
+
 const { getDb } = require('./database');
 
 const db = getDb();

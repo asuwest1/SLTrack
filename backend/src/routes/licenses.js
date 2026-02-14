@@ -1,14 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../database');
+const { requireWrite } = require('../middleware/auth');
+
+// Enforce write access on POST/PUT/DELETE
+router.use(requireWrite);
 
 // GET /api/licenses - List all licenses
 router.get('/', (req, res) => {
   const db = getDb();
   const { titleId } = req.query;
 
+  // Exclude LicenseKey from list responses to avoid mass exposure
   let query = `
-    SELECT l.*, t.TitleName, m.Name as ManufacturerName,
+    SELECT l.LicenseID, l.TitleID, l.PONumber, l.LicenseType, l.Quantity,
+      l.CurrencyCode, l.Cost, l.CostCenter, l.PurchaseDate, l.ExpirationDate,
+      l.AssetMapping, l.Notes, l.CreatedDate,
+      t.TitleName, m.Name as ManufacturerName,
       sc.SupportID, sc.EndDate as SupportEndDate, sc.PONumber as SupportPONumber
     FROM Licenses l
     JOIN SoftwareTitles t ON l.TitleID = t.TitleID
@@ -104,8 +112,20 @@ router.put('/:id', (req, res) => {
 // DELETE /api/licenses/:id
 router.delete('/:id', (req, res) => {
   const db = getDb();
+  const fs = require('fs');
+  const path = require('path');
   const existing = db.prepare('SELECT * FROM Licenses WHERE LicenseID = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'License not found' });
+
+  // Clean up attachment files from disk before deleting DB records
+  const uploadDir = path.resolve(path.join(__dirname, '..', '..', 'uploads'));
+  const attachments = db.prepare('SELECT FilePath FROM Attachments WHERE LicenseID = ?').all(req.params.id);
+  for (const att of attachments) {
+    const resolved = path.resolve(att.FilePath);
+    if (resolved.startsWith(uploadDir) && fs.existsSync(resolved)) {
+      fs.unlinkSync(resolved);
+    }
+  }
 
   db.prepare('DELETE FROM SupportContracts WHERE LicenseID = ?').run(req.params.id);
   db.prepare('DELETE FROM Attachments WHERE LicenseID = ?').run(req.params.id);

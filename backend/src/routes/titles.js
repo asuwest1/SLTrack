@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../database');
+const { requireWrite } = require('../middleware/auth');
+
+// Enforce write access on POST/PUT/DELETE
+router.use(requireWrite);
 
 // GET /api/titles - List all software titles
 router.get('/', (req, res) => {

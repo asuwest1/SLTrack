@@ -6,11 +6,15 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState(false);
 
   useEffect(() => {
     api.getCurrentUser()
       .then(setUser)
-      .catch(() => setUser(null))
+      .catch(() => {
+        setUser(null);
+        setAuthError(true);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -19,7 +23,7 @@ export function AuthProvider({ children }) {
   const canViewSettings = user?.Role === 'SystemAdmin';
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, canEdit, canViewSettings }}>
+    <AuthContext.Provider value={{ user, loading, authError, isAdmin, canEdit, canViewSettings }}>
       {children}
     </AuthContext.Provider>
   );
