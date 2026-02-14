@@ -10,18 +10,21 @@ const ROLE_HIERARCHY = {
 /**
  * Authentication middleware.
  * In production, reads from Windows Integrated Auth headers (REMOTE_USER).
- * In development, uses X-User-Name header or defaults to 'jdoe'.
+ * In development only, falls back to X-User-Name header or 'jdoe'.
  */
 function authenticate(req, res, next) {
   const db = getDb();
+  const isProduction = process.env.NODE_ENV === 'production';
 
   // Production: Windows Integrated Auth sets REMOTE_USER or X-MS-CLIENT-PRINCIPAL-NAME
-  // Development fallback: X-User-Name header or default user
   const username =
     req.headers['x-remote-user'] ||
     req.headers['x-ms-client-principal-name'] ||
-    req.headers['x-user-name'] ||
-    'jdoe'; // Development default
+    (isProduction ? null : (req.headers['x-user-name'] || 'jdoe'));
+
+  if (!username) {
+    return res.status(401).json({ error: 'Authentication required. No identity headers present.' });
+  }
 
   const user = db.prepare('SELECT * FROM Users WHERE Username = ? AND IsActive = 1').get(username);
 

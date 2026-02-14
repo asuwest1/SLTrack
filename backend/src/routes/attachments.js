@@ -91,6 +91,10 @@ router.post('/', upload.single('file'), (req, res) => {
     fs.unlinkSync(req.file.path);
     return res.status(400).json({ error: 'Referenced license does not exist' });
   }
+  if (supportId && !db.prepare('SELECT SupportID FROM SupportContracts WHERE SupportID = ?').get(parseInt(supportId))) {
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: 'Referenced support contract does not exist' });
+  }
 
   const safeName = sanitizeFilename(req.file.originalname);
 
@@ -116,8 +120,9 @@ router.get('/:id/download', (req, res) => {
   if (!attachment) return res.status(404).json({ error: 'Attachment not found' });
 
   // Security: validate the file path is within the uploads directory
+  // Use separator-safe check to prevent prefix bypass (e.g. /uploads-evil/)
   const resolvedPath = path.resolve(attachment.FilePath);
-  if (!resolvedPath.startsWith(uploadDir)) {
+  if (!resolvedPath.startsWith(uploadDir + path.sep) && resolvedPath !== uploadDir) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -135,9 +140,9 @@ router.delete('/:id', (req, res) => {
   const attachment = db.prepare('SELECT * FROM Attachments WHERE AttachmentID = ?').get(parseInt(req.params.id));
   if (!attachment) return res.status(404).json({ error: 'Attachment not found' });
 
-  // Delete file from disk
+  // Delete file from disk (separator-safe boundary check)
   const resolvedPath = path.resolve(attachment.FilePath);
-  if (resolvedPath.startsWith(uploadDir) && fs.existsSync(resolvedPath)) {
+  if ((resolvedPath.startsWith(uploadDir + path.sep) || resolvedPath === uploadDir) && fs.existsSync(resolvedPath)) {
     fs.unlinkSync(resolvedPath);
   }
 

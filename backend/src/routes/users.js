@@ -8,14 +8,10 @@ router.get('/', (req, res) => {
   res.json(db.prepare('SELECT * FROM Users ORDER BY DisplayName ASC').all());
 });
 
-// GET /api/users/current - Get current user (simulates Windows Auth)
+// GET /api/users/current - Return the authenticated request user
 router.get('/current', (req, res) => {
-  const db = getDb();
-  // In production, this would read from Windows Authentication headers
-  // For development, default to System Admin
-  const user = db.prepare('SELECT * FROM Users WHERE Username = ?').get('jdoe');
-  if (!user) return res.status(404).json({ error: 'No user found' });
-  res.json(user);
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  res.json(req.user);
 });
 
 // GET /api/users/:id
