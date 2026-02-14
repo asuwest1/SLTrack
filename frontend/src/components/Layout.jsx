@@ -24,7 +24,7 @@ export default function Layout() {
         </div>
         {user && (
           <div className="header-user">
-            <span className="user-avatar">{user.DisplayName.charAt(0)}</span>
+            <span className="user-avatar">{(user.DisplayName || '?').charAt(0)}</span>
             <span className="user-info">
               {user.DisplayName} ({user.Role === 'SystemAdmin' ? 'System Admin' : user.Role === 'SoftwareAdmin' ? 'Software Admin' : 'License Viewer'})
             </span>

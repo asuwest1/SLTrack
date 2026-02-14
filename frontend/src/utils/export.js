@@ -1,3 +1,12 @@
+// Sanitize cell value to prevent CSV formula injection
+// Prefixes dangerous characters with a single quote to prevent Excel execution
+function sanitizeCell(val) {
+  if (typeof val === 'string' && /^[=+\-@\t\r]/.test(val)) {
+    return "'" + val;
+  }
+  return val;
+}
+
 export function exportToCSV(data, filename) {
   if (!data || data.length === 0) return;
 
@@ -6,7 +15,8 @@ export function exportToCSV(data, filename) {
     headers.join(','),
     ...data.map(row =>
       headers.map(h => {
-        const val = row[h] != null ? String(row[h]) : '';
+        let val = row[h] != null ? String(row[h]) : '';
+        val = sanitizeCell(val);
         return val.includes(',') || val.includes('"') || val.includes('\n')
           ? `"${val.replace(/"/g, '""')}"`
           : val;

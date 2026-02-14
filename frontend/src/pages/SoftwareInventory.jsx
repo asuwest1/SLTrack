@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
 import { exportToCSV } from '../utils/export';
@@ -13,25 +13,34 @@ export default function SoftwareInventory() {
   const [vendor, setVendor] = useState('all');
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editTitle, setEditTitle] = useState(null);
   const { canEdit } = useAuth();
   const navigate = useNavigate();
+  const debounceRef = useRef(null);
+
+  // Debounce search input to avoid API flooding
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(debounceRef.current);
+  }, [search]);
 
   const fetchTitles = () => {
     const params = {};
     if (vendor !== 'all') params.vendor = vendor;
     if (status) params.status = status;
-    if (search) params.search = search;
-    api.getTitles(params).then(setTitles).finally(() => setLoading(false));
+    if (debouncedSearch) params.search = debouncedSearch;
+    api.getTitles(params).then(setTitles).catch(() => {}).finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    api.getManufacturers().then(setManufacturers);
-    api.getResellers().then(setResellers);
+    api.getManufacturers().then(setManufacturers).catch(() => {});
+    api.getResellers().then(setResellers).catch(() => {});
   }, []);
 
-  useEffect(() => { fetchTitles(); }, [vendor, status, search]);
+  useEffect(() => { fetchTitles(); }, [vendor, status, debouncedSearch]);
 
   const handleExport = () => {
     const data = titles.map(t => ({
