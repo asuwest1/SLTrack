@@ -39,8 +39,11 @@ app.use(express.static(path.join(__dirname, '..', '..', 'frontend', 'dist')));
 // Authentication middleware on all /api routes
 app.use('/api', authenticate);
 
-// Public route (no role restriction beyond authentication)
-app.use('/api/users/current', require('./routes/users'));
+// Current user route (any authenticated user, no role restriction)
+app.get('/api/users/current', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  res.json(req.user);
+});
 
 // Read-only routes: any authenticated user
 app.use('/api/dashboard', require('./routes/dashboard'));
