@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { getDb } = require('./database');
+const { initDb } = require('./db');
 const { authenticate, authorize } = require('./middleware/auth');
 
 const app = express();
@@ -35,9 +35,6 @@ app.use((req, res, next) => {
 
 // Serve frontend static files in production
 app.use(express.static(path.join(__dirname, '..', '..', 'frontend', 'dist')));
-
-// Initialize database
-getDb();
 
 // Authentication middleware on all /api routes
 app.use('/api', authenticate);
@@ -79,6 +76,19 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: 'Internal server error' });
 });
 
-app.listen(PORT, () => {
-  console.log(`SLMS Backend running on http://localhost:${PORT}`);
-});
+// Initialize database then start server
+async function start() {
+  try {
+    await initDb();
+    console.log(`Database initialized (${(process.env.DB_TYPE || 'sqlite').toUpperCase()})`);
+
+    app.listen(PORT, () => {
+      console.log(`SLMS Backend running on http://localhost:${PORT}`);
+    });
+  } catch (err) {
+    console.error('Failed to initialize database:', err.message);
+    process.exit(1);
+  }
+}
+
+start();

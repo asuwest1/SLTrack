@@ -4,8 +4,9 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { getDb } = require('../database');
+const { getDb } = require('../db');
 const { requireWrite } = require('../middleware/auth');
+const asyncHandler = require('../utils/asyncHandler');
 
 // Enforce write access on POST/DELETE
 router.use(requireWrite);
@@ -53,7 +54,7 @@ const upload = multer({
 });
 
 // GET /api/attachments?titleId=X or licenseId=X
-router.get('/', (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const db = getDb();
   const { titleId, licenseId, supportId } = req.query;
 
@@ -65,11 +66,11 @@ router.get('/', (req, res) => {
   if (supportId) { query += ' AND SupportID = ?'; params.push(parseInt(supportId)); }
 
   query += ' ORDER BY UploadDate DESC';
-  res.json(db.prepare(query).all(...params));
-});
+  res.json(await db.query(query, params));
+}));
 
 // POST /api/attachments - Upload file
-router.post('/', upload.single('file'), (req, res) => {
+router.post('/', upload.single('file'), asyncHandler(async (req, res) => {
   const db = getDb();
   const { titleId, licenseId, supportId } = req.body;
 
@@ -83,40 +84,40 @@ router.post('/', upload.single('file'), (req, res) => {
   }
 
   // Validate that referenced entities exist
-  if (titleId && !db.prepare('SELECT TitleID FROM SoftwareTitles WHERE TitleID = ?').get(parseInt(titleId))) {
+  if (titleId && !(await db.get('SELECT TitleID FROM SoftwareTitles WHERE TitleID = ?', [parseInt(titleId)]))) {
     fs.unlinkSync(req.file.path);
     return res.status(400).json({ error: 'Referenced title does not exist' });
   }
-  if (licenseId && !db.prepare('SELECT LicenseID FROM Licenses WHERE LicenseID = ?').get(parseInt(licenseId))) {
+  if (licenseId && !(await db.get('SELECT LicenseID FROM Licenses WHERE LicenseID = ?', [parseInt(licenseId)]))) {
     fs.unlinkSync(req.file.path);
     return res.status(400).json({ error: 'Referenced license does not exist' });
   }
-  if (supportId && !db.prepare('SELECT SupportID FROM SupportContracts WHERE SupportID = ?').get(parseInt(supportId))) {
+  if (supportId && !(await db.get('SELECT SupportID FROM SupportContracts WHERE SupportID = ?', [parseInt(supportId)]))) {
     fs.unlinkSync(req.file.path);
     return res.status(400).json({ error: 'Referenced support contract does not exist' });
   }
 
   const safeName = sanitizeFilename(req.file.originalname);
 
-  const result = db.prepare(`
+  const result = await db.run(`
     INSERT INTO Attachments (TitleID, LicenseID, SupportID, FileName, OriginalName, FilePath, FileSize, MimeType)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  `, [
     titleId ? parseInt(titleId) : null,
     licenseId ? parseInt(licenseId) : null,
     supportId ? parseInt(supportId) : null,
     req.file.filename, safeName, req.file.path,
     req.file.size, req.file.mimetype
-  );
+  ]);
 
-  const attachment = db.prepare('SELECT AttachmentID, TitleID, LicenseID, SupportID, OriginalName, FileSize, MimeType, UploadDate FROM Attachments WHERE AttachmentID = ?').get(result.lastInsertRowid);
+  const attachment = await db.get('SELECT AttachmentID, TitleID, LicenseID, SupportID, OriginalName, FileSize, MimeType, UploadDate FROM Attachments WHERE AttachmentID = ?', [result.lastId]);
   res.status(201).json(attachment);
-});
+}));
 
 // GET /api/attachments/:id/download
-router.get('/:id/download', (req, res) => {
+router.get('/:id/download', asyncHandler(async (req, res) => {
   const db = getDb();
-  const attachment = db.prepare('SELECT * FROM Attachments WHERE AttachmentID = ?').get(parseInt(req.params.id));
+  const attachment = await db.get('SELECT * FROM Attachments WHERE AttachmentID = ?', [parseInt(req.params.id)]);
   if (!attachment) return res.status(404).json({ error: 'Attachment not found' });
 
   // Security: validate the file path is within the uploads directory
@@ -132,12 +133,12 @@ router.get('/:id/download', (req, res) => {
 
   const safeName = sanitizeFilename(attachment.OriginalName);
   res.download(resolvedPath, safeName);
-});
+}));
 
 // DELETE /api/attachments/:id
-router.delete('/:id', (req, res) => {
+router.delete('/:id', asyncHandler(async (req, res) => {
   const db = getDb();
-  const attachment = db.prepare('SELECT * FROM Attachments WHERE AttachmentID = ?').get(parseInt(req.params.id));
+  const attachment = await db.get('SELECT * FROM Attachments WHERE AttachmentID = ?', [parseInt(req.params.id)]);
   if (!attachment) return res.status(404).json({ error: 'Attachment not found' });
 
   // Delete file from disk (separator-safe boundary check)
@@ -146,8 +147,8 @@ router.delete('/:id', (req, res) => {
     fs.unlinkSync(resolvedPath);
   }
 
-  db.prepare('DELETE FROM Attachments WHERE AttachmentID = ?').run(parseInt(req.params.id));
+  await db.run('DELETE FROM Attachments WHERE AttachmentID = ?', [parseInt(req.params.id)]);
   res.json({ message: 'Attachment deleted' });
-});
+}));
 
 module.exports = router;

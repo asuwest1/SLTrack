@@ -1,4 +1,4 @@
-const { getDb } = require('../database');
+const { getDb } = require('../db');
 
 // Role hierarchy: SystemAdmin > SoftwareAdmin > LicenseViewer
 const ROLE_HIERARCHY = {
@@ -12,7 +12,7 @@ const ROLE_HIERARCHY = {
  * In production, reads from Windows Integrated Auth headers (REMOTE_USER).
  * In development only, falls back to X-User-Name header or 'jdoe'.
  */
-function authenticate(req, res, next) {
+async function authenticate(req, res, next) {
   const db = getDb();
   const isProduction = process.env.NODE_ENV === 'production';
 
@@ -26,14 +26,18 @@ function authenticate(req, res, next) {
     return res.status(401).json({ error: 'Authentication required. No identity headers present.' });
   }
 
-  const user = db.prepare('SELECT * FROM Users WHERE Username = ? AND IsActive = 1').get(username);
+  try {
+    const user = await db.get('SELECT * FROM Users WHERE Username = ? AND IsActive = 1', [username]);
 
-  if (!user) {
-    return res.status(401).json({ error: 'Authentication required. User not found or inactive.' });
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required. User not found or inactive.' });
+    }
+
+    req.user = user;
+    next();
+  } catch (err) {
+    next(err);
   }
-
-  req.user = user;
-  next();
 }
 
 /**

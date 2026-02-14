@@ -114,13 +114,26 @@ Open **http://localhost:3000** in your browser. Changes to frontend code will ho
 
 ### Environment Variables
 
+Copy `backend/.env.example` to `backend/.env` and adjust for your environment.
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT`   | `3001`  | Backend server port |
+| `PORT` | `3001` | Backend server port |
+| `NODE_ENV` | `development` | Set to `production` for production |
+| `DB_TYPE` | `sqlite` | Database backend: `sqlite` or `mssql` |
+| `DB_SERVER` | — | SQL Server hostname (mssql only) |
+| `DB_NAME` | `SLTrack` | SQL Server database name (mssql only) |
+| `DB_USER` | — | SQL auth username (mssql only) |
+| `DB_PASSWORD` | — | SQL auth password (mssql only) |
+| `DB_PORT` | `1433` | SQL Server port (mssql only) |
+| `DB_ENCRYPT` | `true` | Encrypt SQL Server connections (mssql only) |
+| `DB_TRUST_CERT` | `false` | Trust self-signed certs (mssql only) |
+| `DB_WINDOWS_AUTH` | `false` | Use Windows Integrated Auth for DB (mssql only) |
+| `CORS_ORIGINS` | `http://localhost:3000,http://localhost:3001` | Allowed CORS origins |
 
 ### Database
 
-The application uses SQLite by default. The database file is created at `backend/sltrack.db`. For production deployment with SQL Server, see the [Production Deployment](#production-deployment) section.
+The application uses **SQLite** by default for development. For production deployment, it supports **Microsoft SQL Server 2017+**. Set `DB_TYPE=mssql` in your `.env` file to switch. See the [Production Deployment](#production-deployment) section for full instructions.
 
 ### File Storage
 
@@ -401,23 +414,102 @@ All endpoints are prefixed with `/api`.
 
 ## Production Deployment
 
-### Migrating to SQL Server
+### SQL Server Setup
 
-The SQLite schema is designed for easy migration to SQL Server 2019:
+The application includes built-in support for **Microsoft SQL Server 2017+** as the production database.
 
-1. Replace `better-sqlite3` with `mssql` or `tedious` in the backend.
-2. Update `database.js` to use SQL Server connection strings.
-3. Change `AUTOINCREMENT` to `IDENTITY(1,1)` (already compatible syntax in schema).
-4. Change `INTEGER` to `INT`, `TEXT` to `NVARCHAR(MAX)`.
-5. Run the schema creation scripts against your SQL Server instance.
+#### Prerequisites
+
+- SQL Server 2017 or later (for `STRING_AGG` support)
+- A dedicated database (e.g., `SLTrack`)
+- A service account with db_datareader and db_datawriter roles, or Windows Integrated Authentication
+
+#### Step 1: Create the Database Schema
+
+Run the provided DDL script against your SQL Server instance:
+
+```bash
+sqlcmd -S your-server -d SLTrack -i backend/sql/schema-sqlserver.sql
+```
+
+Or open `backend/sql/schema-sqlserver.sql` in SQL Server Management Studio (SSMS) and execute it against the target database. The script creates all tables, constraints, foreign keys, and performance indexes.
+
+#### Step 2: Configure Environment
+
+Create `backend/.env` from the template:
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Update with your SQL Server connection details:
+
+```env
+DB_TYPE=mssql
+DB_SERVER=your-sql-server.company.com
+DB_NAME=SLTrack
+DB_PORT=1433
+DB_ENCRYPT=true
+DB_TRUST_CERT=false
+NODE_ENV=production
+PORT=3001
+CORS_ORIGINS=https://sltrack.company.com
+
+# SQL Authentication:
+DB_USER=sltrack_app
+DB_PASSWORD=your_secure_password
+
+# OR Windows Integrated Authentication:
+# DB_WINDOWS_AUTH=true
+```
+
+#### Step 3: Build and Deploy
+
+```bash
+# Install dependencies
+cd backend && npm install
+cd ../frontend && npm install
+
+# Build frontend
+npm run build
+
+# Start the server
+cd ../backend
+npm start
+```
+
+#### Step 4: Seed Initial Data (Optional)
+
+To populate the database with sample data for testing (do NOT run in production):
+
+```bash
+cd backend
+node src/seed.js
+```
+
+> **Note:** The seed script is blocked from running when `NODE_ENV=production` to prevent accidental data loss.
+
+### Database Architecture
+
+The application uses a **database abstraction layer** that supports both SQLite and SQL Server:
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| `backend/src/db/index.js` | DB factory | Selects adapter based on `DB_TYPE` env var |
+| `backend/src/db/sqlite-adapter.js` | SQLite adapter | Wraps better-sqlite3 for development |
+| `backend/src/db/mssql-adapter.js` | SQL Server adapter | Uses `mssql` package with connection pooling |
+| `backend/sql/schema-sqlserver.sql` | DDL script | SQL Server schema with indexes |
+
+Both adapters expose the same async interface (`query`, `get`, `run`, `exec`, `transaction`), so all route handlers work identically regardless of the database backend.
 
 ### IIS Deployment
 
 1. Install **iisnode** on Windows Server 2019.
 2. Build the frontend: `cd frontend && npm run build`.
 3. Configure IIS to point to the `backend/` directory with iisnode handler.
-4. Set up Windows Integrated Authentication in IIS for SSO.
-5. Update `backend/src/routes/users.js` to read from the `REMOTE_USER` or `X-MS-CLIENT-PRINCIPAL-NAME` header.
+4. Set up **Windows Integrated Authentication** in IIS for SSO.
+5. The auth middleware automatically reads the `X-Remote-User` or `X-MS-CLIENT-PRINCIPAL-NAME` header set by IIS.
+6. Ensure the IIS application pool identity has access to the SQL Server database.
 
 ### SMTP Alerts
 
