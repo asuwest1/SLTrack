@@ -119,7 +119,7 @@ router.get('/inventory', asyncHandler(async (req, res) => {
     LEFT JOIN Manufacturers m ON t.ManufacturerID = m.ManufacturerID
     LEFT JOIN Resellers r ON t.ResellerID = r.ResellerID
     LEFT JOIN Licenses l ON l.TitleID = t.TitleID
-    GROUP BY t.TitleID
+    GROUP BY t.TitleID, t.TitleName, m.Name, r.Name, t.Category, t.IsDecommissioned
     ORDER BY t.IsDecommissioned ASC, t.TitleName ASC
   `;
 

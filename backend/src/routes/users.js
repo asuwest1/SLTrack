@@ -9,12 +9,6 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json(await db.query('SELECT * FROM Users ORDER BY DisplayName ASC'));
 }));
 
-// GET /api/users/current - Return the authenticated request user
-router.get('/current', (req, res) => {
-  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-  res.json(req.user);
-});
-
 // GET /api/users/:id
 router.get('/:id', asyncHandler(async (req, res) => {
   const db = getDb();
